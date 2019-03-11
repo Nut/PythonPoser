@@ -1,5 +1,6 @@
 .vscode/
 resources/pose_iter_440000.caffemodel
+src/resources/pose_iter_440000.caffemodel
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
