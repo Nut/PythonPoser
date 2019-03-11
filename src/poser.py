@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
-CAM_WIDTH = 300
-CAM_HEIGHT = 200
+CAM_WIDTH = 224
+CAM_HEIGHT = 224
 
 proto_file = os.path.abspath("./resources/pose_deploy_linevec.prototxt")
 weights_file = os.path.abspath("./resources/pose_iter_440000.caffemodel")
