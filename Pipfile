@@ -9,6 +9,7 @@ verify_ssl = true
 opencv-python = "*"
 numpy = "*"
 fastdtw = "*"
+matplotlib = "*"
 
 [requires]
 python_version = "3.7"
