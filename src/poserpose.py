@@ -29,6 +29,7 @@ args = parser.parse_known_args()
 # Custom Params (refer to include/openpose/flags.hpp for more parameters)
 params = dict()
 params["model_folder"] = "/home/cadmin/Documents/openpose/models/"
+#params["model_pose"] = "COCO"
 
 # Add others in path?
 for i in range(0, len(args[1])):
@@ -42,21 +43,12 @@ for i in range(0, len(args[1])):
         key = curr_item.replace('-','')
         if key not in params: params[key] = next_item
 
-# Construct it from system arguments
-# op.init_argv(args[1])
-# oppython = op.OpenposePython()
-
 # Starting OpenPose
 opWrapper = op.WrapperPython()
 opWrapper.configure(params)
 opWrapper.start()
 
 # Config
-#proto_file = os.path.abspath("./resources/pose_deploy_linevec.prototxt")
-#weights_file = os.path.abspath("./resources/pose_iter_440000.caffemodel")
-
-#net = cv2.dnn.readNetFromCaffe(proto_file, weights_file)
-
 CAM_WIDTH = 640
 CAM_HEIGHT = 480
 image_height = 224
@@ -86,50 +78,18 @@ while True:
     color_image = np.asanyarray(color_frame.get_data())
 
     # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
-    depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
-
-    in_blob = cv2.dnn.blobFromImage(color_image, 1.0 / 255, (image_width, image_height), (0, 0, 0), swapRB=False, crop=False)
-    # net.setInput(in_blob)
-    # output = net.forward()
+    depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.2), cv2.COLORMAP_JET)
 
     datum = op.Datum()
     datum.cvInputData = color_image
     opWrapper.emplaceAndPop([datum])
 
-    # H = output.shape[2]
-    # W = output.shape[3]
+    output = datum.poseKeypoints
+    print(len(output[0]))
+    
 
-    cv2.imshow("OpenPose 1.4.0 - Tutorial Python API", datum.cvOutputData)
+    images = np.hstack((datum.cvOutputData,  depth_colormap))
+    cv2.imshow("OpenPose 1.4.0 - Tutorial Python API", images)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
-
-
-
-
-
-
-
-
-
-
-# Read frames on directory
-# imagePaths = op.get_images_on_directory(args[0].image_dir);
-# start = time.time()
-
-# # Process and display images
-# for imagePath in imagePaths:
-#     datum = op.Datum()
-#     imageToProcess = cv2.imread(imagePath)
-#     datum.cvInputData = imageToProcess
-#     opWrapper.emplaceAndPop([datum])
-
-#     print("Body keypoints: \n" + str(datum.poseKeypoints))
-
-#     if not args[0].no_display:
-#         cv2.imshow("OpenPose 1.4.0 - Tutorial Python API", datum.cvOutputData)
-#         key = cv2.waitKey(15)
-#         if key == 27: break
-
-# end = time.time()
-# print("OpenPose demo successfully finished. Total time: " + str(end - start) + " seconds")
