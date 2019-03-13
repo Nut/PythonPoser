@@ -169,7 +169,6 @@ with open("./resources/recording_pol.txt", "r") as file:
                 y = np.array(ringbuffers[buffer_num]).tolist()
                 distance, path = fastdtw(x[buffer_num], y, dist=euclidean)
                 sum_distance += distance
-                #r.append(coords[0][0])
             sum_distance /= 25
 
         if sum_distance <= 6000 and sum_distance > 0:
@@ -177,7 +176,7 @@ with open("./resources/recording_pol.txt", "r") as file:
             print("KNIEBEUGE!!!!!!111elf")
         
         images = np.hstack((datum.cvOutputData,  depth_colormap))
-        cv2.imshow("OpenPose 1.4.0 - Tutorial Python API", images)
+        cv2.imshow("PoserPose", images)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
