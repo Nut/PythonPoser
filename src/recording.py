@@ -48,15 +48,6 @@ opWrapper = op.WrapperPython()
 opWrapper.configure(params)
 opWrapper.start()
 
-# Config
-CAM_WIDTH = 640
-CAM_HEIGHT = 480
-image_height = 224
-image_width = 224 # int((image_height / frame_height) * frame_width)
-frame_width = 224
-frame_height = 224
-POSE_PAIRS = [ [1,0],[1,2],[1,5],[2,3],[3,4],[5,6],[6,7],[1,8],[8,9],[9,10],[1,11],[11,12],[12,13],[0,14],[0,15],[14,16],[15,17]]
-
 POSE_BODY_25_BODY_PARTS = {
     "Nose" : 0,
     "Neck" : 1,
@@ -88,18 +79,7 @@ POSE_BODY_25_BODY_PARTS = {
 
 POSE_PAIRS_25 = [[1,8], [1,2], [1,5], [2,3], [3,4], [5,6], [6,7], [8,9], [9,10], [10,11], [8,12], [12,13], [13,14], [1,0], [0,15], [15,17], [0,16], [16,18], [2,17], [5,18], [14,19], [19,20], [14,21], [11,22], [22,23], [11,24]]
 
-"""# Functions
-def getKeyPointCoords(pose_keypoints, depth_frame, depth_colormap):
-    keypoints_out = []
-    for person in pose_keypoints:
-        for point in person:
-            x = point[0]
-            y = point[1]
-            z = depth_frame.get_distance(x, y)
-            keypoints_out.append([x, y, z])
-            cv2.circle(depth_colormap, (int(x), int(y)), 15, (0, 255, 255), thickness=-1, lineType=cv2.FILLED)
-
-    return keypoints_out, depth_colormap"""
+RECORDING_TIME = 5
 
 # Functions
 def getKeyPointCoords(pose_keypoints, depth_frame, depth_colormap):
@@ -116,9 +96,6 @@ def getKeyPointCoords(pose_keypoints, depth_frame, depth_colormap):
             cv2.circle(depth_colormap, (int(x), int(y)), 15, (0, 255, 255), thickness=-1, lineType=cv2.FILLED)
     return keypoints_out, depth_colormap
 
-# Read Reference Recording from file
-
-
 # Read Webcam
 pipeline = rs.pipeline()
 
@@ -131,34 +108,52 @@ pipeline.start(config)
 align_to = rs.stream.color
 align = rs.align(align_to)
 
-while True:
-    frames = pipeline.wait_for_frames()
-    aligned_frames = align.process(frames)
-    depth_frame = aligned_frames.get_depth_frame()
-    color_frame = aligned_frames.get_color_frame()
+if os.path.exists("./resources/recording.txt"):
+    print("File exists already. Do you want to override?")
+    answer = input("yes/no \n")
     
-    if not depth_frame or not color_frame:
-        continue
+    if answer is not "y":
+        exit()
 
-    depth_image = np.asanyarray(depth_frame.get_data())
-    color_image = np.asanyarray(color_frame.get_data())
+with open("./resources/recording.txt", "w+") as file:
+    recorded_coords = []
+    start_time = time.time()
+    while True:
+        current_time = time.time()
+        if (current_time - start_time) < RECORDING_TIME:
+            frames = pipeline.wait_for_frames()
+            aligned_frames = align.process(frames)
+            depth_frame = aligned_frames.get_depth_frame()
+            color_frame = aligned_frames.get_color_frame()
+            
+            if not depth_frame or not color_frame:
+                continue
 
-    # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
-    depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.2), cv2.COLORMAP_JET)
+            depth_image = np.asanyarray(depth_frame.get_data())
+            color_image = np.asanyarray(color_frame.get_data())
 
-    datum = op.Datum()
-    datum.cvInputData = color_image
-    opWrapper.emplaceAndPop([datum])
+            # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
+            depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.2), cv2.COLORMAP_JET)
 
-    output = datum.poseKeypoints
-    #print(len(output[0]))
+            datum = op.Datum()
+            datum.cvInputData = color_image
+            opWrapper.emplaceAndPop([datum])
 
-    coords, depth_colormap = getKeyPointCoords(output, depth_frame, depth_colormap)
+            output = datum.poseKeypoints
 
-    print(coords)
-    
-    images = np.hstack((datum.cvOutputData,  depth_colormap))
-    cv2.imshow("OpenPose 1.4.0 - Tutorial Python API", images)
+            coords, depth_colormap = getKeyPointCoords(output, depth_frame, depth_colormap)
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+            recorded_coords.append(coords)
+            
+            images = np.hstack((datum.cvOutputData,  depth_colormap))
+            cv2.imshow("OpenPose 1.4.0 - Tutorial Python API", images)
+
+        else:
+            break
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    for item in recorded_coords:
+        file.write("%s\n" % item)
+    file.close()
