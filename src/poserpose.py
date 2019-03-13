@@ -119,8 +119,7 @@ with open("./resources/recording_pol.txt", "r") as file:
     #print(imported_json[0][0])
     for frame in imported_json:
         for person in frame:
-            for keypoint in person:
-                flattened_ref_keypoints.append(keypoint)
+            flattened_ref_keypoints.append(person)
     x = np.array(flattened_ref_keypoints)
 
     # Read Webcam
@@ -135,7 +134,9 @@ with open("./resources/recording_pol.txt", "r") as file:
     align_to = rs.stream.color
     align = rs.align(align_to)
 
-    r = RingBuffer(capacity=28*25, dtype=list)
+    ringbuffers = []
+    for i in range(0, 24):
+        ringbuffers.append(RingBuffer(capacity=28, dtype=list))
 
     while True:
         frames = pipeline.wait_for_frames()
@@ -159,18 +160,21 @@ with open("./resources/recording_pol.txt", "r") as file:
         output = datum.poseKeypoints
 
         coords, depth_colormap = getKeyPointCoords(output, depth_frame, depth_colormap)
+        
+        sum_distance = 0
 
         if coords:
-            r.append(coords[0])
+            for buffer_num in range(0, 24):
+                ringbuffers[buffer_num].append(coords[0][buffer_num])
+                y = np.array(ringbuffers[buffer_num]).tolist()
+                distance, path = fastdtw(x[buffer_num], y, dist=euclidean)
+                sum_distance += distance
+                #r.append(coords[0][0])
+            sum_distance /= 25
 
-        #print(np.array(r).tolist())
-
-        y = np.array(r).tolist()[0]
-
-        #x = np.array([[1,1,1], [2,2,2], [3,3,3], [4,4,4], [5,5,5]])
-        #y = np.array([[2,2,2], [3,3,3], [4,4,4], [4,4,4], [4,4,4]])
-        distance, path = fastdtw(x, y, dist=euclidean)
-        print(distance)
+        if sum_distance <= 6000 and sum_distance > 0:
+            print(sum_distance)
+            print("KNIEBEUGE!!!!!!111elf")
         
         images = np.hstack((datum.cvOutputData,  depth_colormap))
         cv2.imshow("OpenPose 1.4.0 - Tutorial Python API", images)
