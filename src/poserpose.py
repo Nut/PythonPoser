@@ -101,6 +101,8 @@ def getKeyPointCoords(pose_keypoints, depth_frame, depth_colormap):
 
     return keypoints_out, depth_colormap
 
+# Read Reference Recording from file
+
 
 # Read Webcam
 pipeline = rs.pipeline()
