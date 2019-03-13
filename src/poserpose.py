@@ -29,7 +29,7 @@ args = parser.parse_known_args()
 # Custom Params (refer to include/openpose/flags.hpp for more parameters)
 params = dict()
 params["model_folder"] = "/home/cadmin/Documents/openpose/models/"
-#params["model_pose"] = "COCO"
+params["model_pose"] = "BODY_25"
 
 # Add others in path?
 for i in range(0, len(args[1])):
@@ -57,6 +57,51 @@ frame_width = 224
 frame_height = 224
 POSE_PAIRS = [ [1,0],[1,2],[1,5],[2,3],[3,4],[5,6],[6,7],[1,8],[8,9],[9,10],[1,11],[11,12],[12,13],[0,14],[0,15],[14,16],[15,17]]
 
+POSE_BODY_25_BODY_PARTS = {
+    "Nose" : 0,
+    "Neck" : 1,
+    "RShoulder" : 2,
+    "RElbow" : 3,
+    "RWrist" : 4,
+    "LShoulder" : 5,
+    "LElbow" : 6,
+    "LWrist" : 7,
+    "MidHip" : 8,
+    "RHip" : 9,
+    "RKnee" : 10,
+    "RAnkle" : 11,
+    "LHip" : 12,
+    "LKnee" : 13,
+    "LAnkle" : 14,
+    "REye" : 15,
+    "LEye" : 16,
+    "REar" : 17,
+    "LEar" : 18,
+    "LBigToe" : 19,
+    "LSmallToe" : 20,
+    "LHeel" : 21,
+    "RBigToe" : 22,
+    "RSmallToe" : 23,
+    "RHeel" : 24,
+    "Background" : 25
+}
+
+POSE_PAIRS_25 = [[1,8], [1,2], [1,5], [2,3], [3,4], [5,6], [6,7], [8,9], [9,10], [10,11], [8,12], [12,13], [13,14], [1,0], [0,15], [15,17], [0,16], [16,18], [2,17], [5,18], [14,19], [19,20], [14,21], [11,22], [22,23], [11,24]]
+
+# Functions
+def getKeyPointCoords(pose_keypoints, depth_frame, depth_colormap):
+    keypoints_out = []
+    for person in pose_keypoints:
+        for point in person:
+            x = point[0]
+            y = point[1]
+            z = depth_frame.get_distance(x, y)
+            keypoints_out.append([x, y, z])
+            cv2.circle(depth_colormap, (int(x), int(y)), 15, (0, 255, 255), thickness=-1, lineType=cv2.FILLED)
+
+    return keypoints_out, depth_colormap
+
+
 # Read Webcam
 pipeline = rs.pipeline()
 
@@ -66,10 +111,14 @@ config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 
 pipeline.start(config)
 
+align_to = rs.stream.color
+align = rs.align(align_to)
+
 while True:
     frames = pipeline.wait_for_frames()
-    depth_frame = frames.get_depth_frame()
-    color_frame = frames.get_color_frame()
+    aligned_frames = align.process(frames)
+    depth_frame = aligned_frames.get_depth_frame()
+    color_frame = aligned_frames.get_color_frame()
     
     if not depth_frame or not color_frame:
         continue
@@ -85,9 +134,12 @@ while True:
     opWrapper.emplaceAndPop([datum])
 
     output = datum.poseKeypoints
-    print(len(output[0]))
-    
+    #print(len(output[0]))
 
+    coords, depth_colormap = getKeyPointCoords(output, depth_frame, depth_colormap)
+
+    print(coords)
+    
     images = np.hstack((datum.cvOutputData,  depth_colormap))
     cv2.imshow("OpenPose 1.4.0 - Tutorial Python API", images)
 
