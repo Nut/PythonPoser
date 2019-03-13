@@ -88,30 +88,21 @@ POSE_BODY_25_BODY_PARTS = {
 
 POSE_PAIRS_25 = [[1,8], [1,2], [1,5], [2,3], [3,4], [5,6], [6,7], [8,9], [9,10], [10,11], [8,12], [12,13], [13,14], [1,0], [0,15], [15,17], [0,16], [16,18], [2,17], [5,18], [14,19], [19,20], [14,21], [11,22], [22,23], [11,24]]
 
-"""# Functions
-def getKeyPointCoords(pose_keypoints, depth_frame, depth_colormap):
-    keypoints_out = []
-    for person in pose_keypoints:
-        for point in person:
-            x = point[0]
-            y = point[1]
-            z = depth_frame.get_distance(x, y)
-            keypoints_out.append([x, y, z])
-            cv2.circle(depth_colormap, (int(x), int(y)), 15, (0, 255, 255), thickness=-1, lineType=cv2.FILLED)
-
-    return keypoints_out, depth_colormap"""
-
 # Functions
 def getKeyPointCoords(pose_keypoints, depth_frame, depth_colormap):
     keypoints_out = []
+    pose_keypoints = pose_keypoints.tolist()
+    if type(pose_keypoints) == float:
+        return keypoints_out, depth_colormap
+
     for i in range(0, len(pose_keypoints)):
         keypoints_out.append([])
         person = pose_keypoints[i]
         for j in range(0, len(person)):
             point = person[j]
-            x = point[0]
-            y = point[1]
-            z = depth_frame.get_distance(x, y)
+            x = float(point[0])
+            y = float(point[1])
+            z = depth_frame.get_distance(int(x), int(y))
             keypoints_out[i].append([x, y, z])
             cv2.circle(depth_colormap, (int(x), int(y)), 15, (0, 255, 255), thickness=-1, lineType=cv2.FILLED)
     return keypoints_out, depth_colormap
@@ -151,11 +142,8 @@ while True:
     opWrapper.emplaceAndPop([datum])
 
     output = datum.poseKeypoints
-    #print(len(output[0]))
 
     coords, depth_colormap = getKeyPointCoords(output, depth_frame, depth_colormap)
-
-    print(coords)
     
     images = np.hstack((datum.cvOutputData,  depth_colormap))
     cv2.imshow("OpenPose 1.4.0 - Tutorial Python API", images)

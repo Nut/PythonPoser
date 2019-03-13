@@ -84,14 +84,18 @@ RECORDING_TIME = 5
 # Functions
 def getKeyPointCoords(pose_keypoints, depth_frame, depth_colormap):
     keypoints_out = []
+    pose_keypoints = pose_keypoints.tolist()
+    if type(pose_keypoints) == float:
+        return keypoints_out, depth_colormap
+
     for i in range(0, len(pose_keypoints)):
         keypoints_out.append([])
         person = pose_keypoints[i]
         for j in range(0, len(person)):
             point = person[j]
-            x = point[0]
-            y = point[1]
-            z = depth_frame.get_distance(x, y)
+            x = float(point[0])
+            y = float(point[1])
+            z = depth_frame.get_distance(int(x), int(y))
             keypoints_out[i].append([x, y, z])
             cv2.circle(depth_colormap, (int(x), int(y)), 15, (0, 255, 255), thickness=-1, lineType=cv2.FILLED)
     return keypoints_out, depth_colormap
