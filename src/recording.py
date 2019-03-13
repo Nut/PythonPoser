@@ -9,6 +9,7 @@ import time
 import pyrealsense2 as rs
 
 import numpy as np
+import json
 
 
 # Import Openpose (Windows/Ubuntu/OSX)
@@ -158,6 +159,6 @@ with open("./resources/recording.txt", "w+") as file:
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
-    for item in recorded_coords:
-        file.write("%s\n" % item)
+    #for item in recorded_coords:
+    file.write(json.dumps(recorded_coords))
     file.close()

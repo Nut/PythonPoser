@@ -7,8 +7,13 @@ from sys import platform
 import argparse
 import time
 import pyrealsense2 as rs
+import json
 
 import numpy as np
+from numpy_ringbuffer import RingBuffer
+
+from fastdtw import fastdtw
+from scipy.spatial.distance import euclidean
 
 
 # Import Openpose (Windows/Ubuntu/OSX)
@@ -108,45 +113,67 @@ def getKeyPointCoords(pose_keypoints, depth_frame, depth_colormap):
     return keypoints_out, depth_colormap
 
 # Read Reference Recording from file
+with open("./resources/recording_pol.txt", "r") as file:
+    imported_json = json.load(file)
+    flattened_ref_keypoints = []
+    #print(imported_json[0][0])
+    for frame in imported_json:
+        for person in frame:
+            for keypoint in person:
+                flattened_ref_keypoints.append(keypoint)
+    x = np.array(flattened_ref_keypoints)
 
+    # Read Webcam
+    pipeline = rs.pipeline()
 
-# Read Webcam
-pipeline = rs.pipeline()
+    config = rs.config()
+    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 
-config = rs.config()
-config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+    pipeline.start(config)
 
-pipeline.start(config)
+    align_to = rs.stream.color
+    align = rs.align(align_to)
 
-align_to = rs.stream.color
-align = rs.align(align_to)
+    r = RingBuffer(capacity=28*25, dtype=list)
 
-while True:
-    frames = pipeline.wait_for_frames()
-    aligned_frames = align.process(frames)
-    depth_frame = aligned_frames.get_depth_frame()
-    color_frame = aligned_frames.get_color_frame()
-    
-    if not depth_frame or not color_frame:
-        continue
+    while True:
+        frames = pipeline.wait_for_frames()
+        aligned_frames = align.process(frames)
+        depth_frame = aligned_frames.get_depth_frame()
+        color_frame = aligned_frames.get_color_frame()
+        
+        if not depth_frame or not color_frame:
+            continue
 
-    depth_image = np.asanyarray(depth_frame.get_data())
-    color_image = np.asanyarray(color_frame.get_data())
+        depth_image = np.asanyarray(depth_frame.get_data())
+        color_image = np.asanyarray(color_frame.get_data())
 
-    # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
-    depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.2), cv2.COLORMAP_JET)
+        # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
+        depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.2), cv2.COLORMAP_JET)
 
-    datum = op.Datum()
-    datum.cvInputData = color_image
-    opWrapper.emplaceAndPop([datum])
+        datum = op.Datum()
+        datum.cvInputData = color_image
+        opWrapper.emplaceAndPop([datum])
 
-    output = datum.poseKeypoints
+        output = datum.poseKeypoints
 
-    coords, depth_colormap = getKeyPointCoords(output, depth_frame, depth_colormap)
-    
-    images = np.hstack((datum.cvOutputData,  depth_colormap))
-    cv2.imshow("OpenPose 1.4.0 - Tutorial Python API", images)
+        coords, depth_colormap = getKeyPointCoords(output, depth_frame, depth_colormap)
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+        if coords:
+            r.append(coords[0])
+
+        #print(np.array(r).tolist())
+
+        y = np.array(r).tolist()[0]
+
+        #x = np.array([[1,1,1], [2,2,2], [3,3,3], [4,4,4], [5,5,5]])
+        #y = np.array([[2,2,2], [3,3,3], [4,4,4], [4,4,4], [4,4,4]])
+        distance, path = fastdtw(x, y, dist=euclidean)
+        print(distance)
+        
+        images = np.hstack((datum.cvOutputData,  depth_colormap))
+        cv2.imshow("OpenPose 1.4.0 - Tutorial Python API", images)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
