@@ -53,46 +53,6 @@ opWrapper = op.WrapperPython()
 opWrapper.configure(params)
 opWrapper.start()
 
-# Config
-CAM_WIDTH = 640
-CAM_HEIGHT = 480
-image_height = 224
-image_width = 224 # int((image_height / frame_height) * frame_width)
-frame_width = 224
-frame_height = 224
-POSE_PAIRS = [ [1,0],[1,2],[1,5],[2,3],[3,4],[5,6],[6,7],[1,8],[8,9],[9,10],[1,11],[11,12],[12,13],[0,14],[0,15],[14,16],[15,17]]
-
-POSE_BODY_25_BODY_PARTS = {
-    "Nose" : 0,
-    "Neck" : 1,
-    "RShoulder" : 2,
-    "RElbow" : 3,
-    "RWrist" : 4,
-    "LShoulder" : 5,
-    "LElbow" : 6,
-    "LWrist" : 7,
-    "MidHip" : 8,
-    "RHip" : 9,
-    "RKnee" : 10,
-    "RAnkle" : 11,
-    "LHip" : 12,
-    "LKnee" : 13,
-    "LAnkle" : 14,
-    "REye" : 15,
-    "LEye" : 16,
-    "REar" : 17,
-    "LEar" : 18,
-    "LBigToe" : 19,
-    "LSmallToe" : 20,
-    "LHeel" : 21,
-    "RBigToe" : 22,
-    "RSmallToe" : 23,
-    "RHeel" : 24,
-    "Background" : 25
-}
-
-POSE_PAIRS_25 = [[1,8], [1,2], [1,5], [2,3], [3,4], [5,6], [6,7], [8,9], [9,10], [10,11], [8,12], [12,13], [13,14], [1,0], [0,15], [15,17], [0,16], [16,18], [2,17], [5,18], [14,19], [19,20], [14,21], [11,22], [22,23], [11,24]]
-
 # Functions
 def getKeyPointCoords(pose_keypoints, depth_frame, depth_colormap):
     keypoints_out = []
@@ -138,6 +98,8 @@ with open("./resources/recording_pol.txt", "r") as file:
     for i in range(0, 24):
         ringbuffers.append(RingBuffer(capacity=28, dtype=list))
 
+    prev_sum_distance = 0
+
     while True:
         frames = pipeline.wait_for_frames()
         aligned_frames = align.process(frames)
@@ -171,12 +133,15 @@ with open("./resources/recording_pol.txt", "r") as file:
                 sum_distance += distance
             sum_distance /= 25
 
-        if sum_distance <= 6000 and sum_distance > 0:
-            print(sum_distance)
-            print("KNIEBEUGE!!!!!!111elf")
+        distance_derivative = sum_distance - prev_sum_distance
+
+        if distance_derivative <= -150:
+            print("KNIEBEUGE")
         
         images = np.hstack((datum.cvOutputData,  depth_colormap))
         cv2.imshow("PoserPose", images)
+
+        prev_sum_distance = sum_distance
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
