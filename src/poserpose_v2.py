@@ -8,6 +8,7 @@ import argparse
 import time
 import pyrealsense2 as rs
 import json
+import math
 
 import numpy as np
 from numpy_ringbuffer import RingBuffer
@@ -15,6 +16,7 @@ from numpy_ringbuffer import RingBuffer
 from fastdtw import fastdtw
 from scipy.spatial.distance import euclidean
 
+INTRINSICS = None
 
 # Import Openpose (Windows/Ubuntu/OSX)
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -53,6 +55,41 @@ opWrapper = op.WrapperPython()
 opWrapper.configure(params)
 opWrapper.start()
 
+def transformPixelToCameraCoords(coords): # Pixel to Camera Coordinates
+    return rs.rs2_deproject_pixel_to_point(INTRINSICS, [coords[0], coords[1]], coords[2])
+
+def getVector(coord_1, coord_2):
+    a = np.array(coord_1)
+    b = np.array(coord_2)
+    return b - a
+
+def getBodyBaseVectors(keypoints):
+    base_vector_x = getVector(keypoints[8], keypoints[12])
+    base_vector_y = getVector(keypoints[8], keypoints[1])
+    base_vetor_x_norm = base_vector_x / np.linalg.norm(base_vector_x)
+    base_vetor_y_norm = base_vector_y / np.linalg.norm(base_vector_y)
+    base_vetor_z_norm = np.cross(base_vetor_x_norm, base_vetor_y_norm)
+    return base_vetor_x_norm, base_vetor_y_norm, base_vetor_z_norm
+
+def getAngle(vector_a, vector_b):
+    return math.acos(np.dot(vector_a, vector_b) / (np.linalg.norm(vector_a) * np.linalg.norm(vector_b)))
+
+def transformCameraToBodyCoords(keypoints, base_keypoint, coord):
+    rc = np.array(coord)
+    hc = transformPixelToCameraCoords(base_keypoint)
+
+    rotation_matrix = np.column_stack(getBodyBaseVectors(keypoints))
+
+    vector = rotation_matrix.dot(rc - hc)
+    print(vector)
+    return vector
+    #getBodyBaseVectors()
+
+
+getVector([0, 0, 1], [1, 1, 1])
+
+#transformPixelToCameraCoords()
+
 # Functions
 def getKeyPointCoords(pose_keypoints, depth_frame, depth_colormap):
     keypoints_out = []
@@ -66,7 +103,7 @@ def getKeyPointCoords(pose_keypoints, depth_frame, depth_colormap):
         for j in range(0, len(person)):
             if j not in []: #[0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13]:
                 point = person[j]
-                x = float(point[0]) / 10.0
+                x = float(point[0])
                 y = float(point[1])
                 z = depth_frame.get_distance(int(x), int(y))
                 cv2.circle(depth_colormap, (int(x), int(y)), 15, (0, 255, 255), thickness=-1, lineType=cv2.FILLED)
@@ -108,6 +145,7 @@ with open("./resources/recording_pol.txt", "r") as file:
         frames = pipeline.wait_for_frames()
         aligned_frames = align.process(frames)
         depth_frame = aligned_frames.get_depth_frame()
+        INTRINSICS = depth_frame.profile.as_video_stream_profile().intrinsics
         color_frame = aligned_frames.get_color_frame()
         
         if not depth_frame or not color_frame:
@@ -126,14 +164,15 @@ with open("./resources/recording_pol.txt", "r") as file:
         output = datum.poseKeypoints
 
         coords, depth_colormap = getKeyPointCoords(output, depth_frame, depth_colormap)
-        
+
         sum_distance = 0
 
         if coords:
+            transformCameraToBodyCoords(coords[0], coords[0][8], transformPixelToCameraCoords(coords[0][4]))
             for buffer_num in range(0, 24):
                 if buffer_num not in []: #[0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13]:
                     x_temp, y_temp, z_temp = coords[0][buffer_num]
-                    ringbuffers[buffer_num].append([x_temp / 10.0, y_temp, z_temp])
+                    ringbuffers[buffer_num].append([x_temp, y_temp, z_temp])
                 else:
                     ringbuffers[buffer_num].append([0.0, 0.0, 0.0])
                 y = np.array(ringbuffers[buffer_num]).tolist()
@@ -146,10 +185,11 @@ with open("./resources/recording_pol.txt", "r") as file:
         image_frame = datum.cvOutputData
 
         if distance_derivative < 0:
-            print(distance_derivative)
+            pass
+            #print(distance_derivative)
         
         if distance_derivative <= -80:
-            print("KNIEBEUGE")
+            #print("KNIEBEUGE")
             cv2.rectangle(image_frame, (0, 0), (640, 480), (0, 255, 0), thickness=5)
             font = cv2.FONT_HERSHEY_SIMPLEX
             cv2.putText(image_frame,'Kniebeuge',(10,400), font, 4,(0,255,0),2,cv2.LINE_AA)
