@@ -66,10 +66,19 @@ def getVector(coord_1, coord_2):
 def getBodyBaseVectors(keypoints):
     base_vector_x = getVector(keypoints[8], keypoints[12])
     base_vector_y = getVector(keypoints[8], keypoints[1])
-    base_vetor_x_norm = base_vector_x / np.linalg.norm(base_vector_x)
-    base_vetor_y_norm = base_vector_y / np.linalg.norm(base_vector_y)
-    base_vetor_z_norm = np.cross(base_vetor_x_norm, base_vetor_y_norm)
-    return base_vetor_x_norm, base_vetor_y_norm, base_vetor_z_norm
+
+    if np.linalg.norm(base_vector_x) == 0:
+        base_vector_x_norm = [0, 0, 0]
+    else:
+        base_vector_x_norm = base_vector_x / np.linalg.norm(base_vector_x)
+
+    if np.linalg.norm(base_vector_y) == 0:
+        base_vector_y_norm = [0, 0, 0]
+    else:
+        base_vector_y_norm = base_vector_y / np.linalg.norm(base_vector_y)
+
+    base_vector_z_norm = np.cross(base_vector_x_norm, base_vector_y_norm)
+    return base_vector_x_norm, base_vector_y_norm, base_vector_z_norm
 
 def getAngle(vector_a, vector_b):
     return math.acos(np.dot(vector_a, vector_b) / (np.linalg.norm(vector_a) * np.linalg.norm(vector_b)))
@@ -77,20 +86,10 @@ def getAngle(vector_a, vector_b):
 def transformCameraToBodyCoords(keypoints, base_keypoint, coord):
     rc = np.array(coord)
     hc = transformPixelToCameraCoords(base_keypoint)
-
     rotation_matrix = np.column_stack(getBodyBaseVectors(keypoints))
-
     vector = rotation_matrix.dot(rc - hc)
-    print(vector)
     return vector
-    #getBodyBaseVectors()
 
-
-getVector([0, 0, 1], [1, 1, 1])
-
-#transformPixelToCameraCoords()
-
-# Functions
 def getKeyPointCoords(pose_keypoints, depth_frame, depth_colormap):
     keypoints_out = []
     pose_keypoints = pose_keypoints.tolist()
@@ -101,7 +100,7 @@ def getKeyPointCoords(pose_keypoints, depth_frame, depth_colormap):
         keypoints_out.append([])
         person = pose_keypoints[i]
         for j in range(0, len(person)):
-            if j not in []: #[0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13]:
+            if j not in [10, 11, 13, 14]: # only specific keypoints
                 point = person[j]
                 x = float(point[0])
                 y = float(point[1])
@@ -113,16 +112,21 @@ def getKeyPointCoords(pose_keypoints, depth_frame, depth_colormap):
             keypoints_out[i].append([x, y, z])
     return keypoints_out, depth_colormap
 
-# Read Reference Recording from file
-with open("./resources/recording_pol.txt", "r") as file:
+def getReferenceData(file):
     imported_json = json.load(file)
     flattened_ref_keypoints = []
-    #print(imported_json[0][0])
     for frame in imported_json:
         for person in frame:
-            flattened_ref_keypoints.append(person)
-    x = np.array(flattened_ref_keypoints)
+            frame = []
+            for keypoint in person:
+                camera_coords = transformPixelToCameraCoords(keypoint)
+                body_coords = transformCameraToBodyCoords(person, person[8], camera_coords)
+                frame.append(body_coords)
+            flattened_ref_keypoints.append(frame)
+    return np.array(flattened_ref_keypoints)
 
+# Read Reference Recording from file
+with open("./resources/recording_pol.txt", "r") as file:
     # Read Webcam
     pipeline = rs.pipeline()
 
@@ -136,16 +140,23 @@ with open("./resources/recording_pol.txt", "r") as file:
     align = rs.align(align_to)
 
     ringbuffers = []
+    # Add one ringbuffer for each keypoint
     for i in range(0, 24):
-        ringbuffers.append(RingBuffer(capacity=28, dtype=list))
+        ringbuffers.append(RingBuffer(capacity=28, dtype=list)) # capacity depends on length of recording
 
     prev_sum_distance = 0
+    x = None
 
     while True:
         frames = pipeline.wait_for_frames()
         aligned_frames = align.process(frames)
         depth_frame = aligned_frames.get_depth_frame()
+
+        # calibriated internal parameters from RealSense
         INTRINSICS = depth_frame.profile.as_video_stream_profile().intrinsics
+        if x is None:
+            x = getReferenceData(file)
+
         color_frame = aligned_frames.get_color_frame()
         
         if not depth_frame or not color_frame:
@@ -163,36 +174,36 @@ with open("./resources/recording_pol.txt", "r") as file:
 
         output = datum.poseKeypoints
 
-        coords, depth_colormap = getKeyPointCoords(output, depth_frame, depth_colormap)
+        coords_pixel, depth_colormap = getKeyPointCoords(output, depth_frame, depth_colormap)
+        coords = [[]]
 
-        sum_distance = 0
-
-        if coords:
-            transformCameraToBodyCoords(coords[0], coords[0][8], transformPixelToCameraCoords(coords[0][4]))
-            for buffer_num in range(0, 24):
-                if buffer_num not in []: #[0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13]:
-                    x_temp, y_temp, z_temp = coords[0][buffer_num]
-                    ringbuffers[buffer_num].append([x_temp, y_temp, z_temp])
-                else:
-                    ringbuffers[buffer_num].append([0.0, 0.0, 0.0])
-                y = np.array(ringbuffers[buffer_num]).tolist()
-                distance, path = fastdtw(x[buffer_num], y, dist=euclidean)
-                sum_distance += distance
-            sum_distance /= 25
-
-        distance_derivative = sum_distance - prev_sum_distance
-        
         image_frame = datum.cvOutputData
 
-        if distance_derivative < 0:
-            pass
-            #print(distance_derivative)
+        if coords_pixel:
+            for keypoint in coords_pixel[0]:
+                coords[0].append(transformCameraToBodyCoords(coords_pixel[0], coords_pixel[0][8], transformPixelToCameraCoords(keypoint)))
+
+            sum_distance = 0
+
+            if coords:
+                for buffer_num in range(0, 24):
+                    if buffer_num not in [10, 11, 13, 14]: # only specific keypoints
+                        x_temp, y_temp, z_temp = coords[0][buffer_num]
+                        ringbuffers[buffer_num].append([x_temp, y_temp, z_temp])
+                    else:
+                        ringbuffers[buffer_num].append([0.0, 0.0, 0.0])
+                    y = np.array(ringbuffers[buffer_num]).tolist()
+                    distance, path = fastdtw(x[buffer_num], y, dist=euclidean)
+                    sum_distance += distance
+                print(sum_distance)
+
+            distance_derivative = sum_distance - prev_sum_distance
         
-        if distance_derivative <= -80:
-            #print("KNIEBEUGE")
-            cv2.rectangle(image_frame, (0, 0), (640, 480), (0, 255, 0), thickness=5)
-            font = cv2.FONT_HERSHEY_SIMPLEX
-            cv2.putText(image_frame,'Kniebeuge',(10,400), font, 4,(0,255,0),2,cv2.LINE_AA)
+            if distance_derivative < -10.0:
+                print("KNIEBEUGE")
+                cv2.rectangle(image_frame, (0, 0), (640, 480), (0, 255, 0), thickness=5)
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                cv2.putText(image_frame,'Kniebeuge',(10,400), font, 4,(0,255,0),2,cv2.LINE_AA)
         
         images = np.hstack((image_frame,  depth_colormap))
         cv2.imshow("PoserPose", images)
