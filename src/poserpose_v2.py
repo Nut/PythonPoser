@@ -199,7 +199,8 @@ with open("./resources/recording_pol.txt", "r") as file:
 
             distance_derivative = sum_distance - prev_sum_distance
         
-            if distance_derivative < -10.0:
+            # if distance_derivative < -10.0:
+            if sum_distance < 470:
                 print("KNIEBEUGE")
                 cv2.rectangle(image_frame, (0, 0), (640, 480), (0, 255, 0), thickness=5)
                 font = cv2.FONT_HERSHEY_SIMPLEX
